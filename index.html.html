@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Carp Conditions</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one column on a phone; the score sits above the day curve, calendar and pressure trend. */
+:root {
+  --bg: #f3f1ea; --ink: #1d2420; --muted: #66706a; --line: #d9d6cb; --card: #fbfaf6;
+  --accent: #2f6b4f; --warm: #b5652b; --cool: #3c6e8f;
+  --display: "Newsreader", Georgia, serif; --body: "Instrument Sans", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141a17; --ink: #e8ece8; --muted: #98a39c; --line: #2b3530; --card: #1b2320;
+    --accent: #7fbf9c; --warm: #e0955a; --cool: #7fb0cc; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141a17; --ink: #e8ece8; --muted: #98a39c; --line: #2b3530; --card: #1b2320;
+  --accent: #7fbf9c; --warm: #e0955a; --cool: #7fb0cc; color-scheme: dark;
+}
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--body);
+  padding-block: 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+main { max-width: 560px; margin: 0 auto; display: grid; gap: 16px; }
+h1, h2 { font-family: var(--display); font-weight: 600; margin: 0; text-wrap: balance; }
+h1 { font-size: 26px; line-height: 1.15; }
+h2 { font-size: 18px; }
+.muted { color: var(--muted); }
+.label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; min-width: 0; }
+header { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; }
+.score-row { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.big { font-family: var(--display); font-size: 64px; line-height: 1; font-variant-numeric: tabular-nums; color: var(--accent); }
+.parts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex: 1; min-width: 180px; }
+.part { border-top: 2px solid var(--line); padding-top: 6px; }
+.part b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+.days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.day { background: none; border: 1px solid var(--line); border-radius: 10px; padding: 8px 2px; color: var(--ink); font: inherit; cursor: pointer; text-align: center; min-width: 0; }
+.day[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.day .n { font-size: 11px; color: var(--muted); }
+.day .s { font-family: var(--display); font-size: 20px; font-variant-numeric: tabular-nums; }
+svg { width: 100%; height: auto; display: block; }
+.grid line { stroke: var(--line); }
+.axis text, .tick { fill: var(--muted); font-size: 10px; }
+.stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 16px; }
+.stats div { min-width: 0; }
+.stats b { font-variant-numeric: tabular-nums; }
+details summary { cursor: pointer; font-weight: 600; }
+label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+input[type=text], input[type=number] { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; min-width: 0; width: 100%; box-sizing: border-box; }
+button.primary { font: inherit; background: var(--accent); color: var(--bg); border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+button.ghost { font: inherit; background: none; color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.note { font-size: 12px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <div class="label" id="where">Loading location</div>
+      <h1>Carp Conditions</h1>
+    </div>
+    <div class="label" id="updated"></div>
+  </header>
+
+  <section class="card" aria-labelledby="today-h">
+    <div class="label" id="today-h">Today</div>
+    <div class="score-row" style="margin-top:8px">
+      <div class="big" id="score">--</div>
+      <div class="parts">
+        <div class="part"><span class="label">Weather</span><b id="p-weather">--</b></div>
+        <div class="part"><span class="label">Falling pressure</span><b id="p-fall">--</b></div>
+        <div class="part"><span class="label">Moon</span><b id="p-moon">--</b></div>
+      </div>
+    </div>
+    <p class="note" id="explain" style="margin:12px 0 0"></p>
+  </section>
+
+  <section class="card">
+    <div class="label">Next 7 days</div>
+    <div class="days" id="days" style="margin-top:8px"></div>
+    <p class="note" style="margin:10px 0 0">Tap a day to see its hourly curve.</p>
+  </section>
+
+  <section class="card">
+    <div class="label" id="curve-h">Hourly score</div>
+    <div id="curve" style="margin-top:8px"></div>
+    <p class="note">A rough guide. The hourly curve uses the same scale as the daily score.</p>
+  </section>
+
+  <section class="card">
+    <div class="label">Pressure, 48 hours back and 72 forward</div>
+    <div id="pressure" style="margin-top:8px"></div>
+    <p class="note" id="pressure-note"></p>
+  </section>
+
+  <section class="card">
+    <div class="label">Weather and sky</div>
+    <div class="stats" style="margin-top:10px" id="summary"></div>
+  </section>
+
+  <details class="card">
+    <summary>Settings</summary>
+    <div style="display:grid; gap:12px; margin-top:12px">
+      <div class="stats">
+        <label>Latitude <input type="number" id="lat" step="0.0001"></label>
+        <label>Longitude <input type="number" id="lon" step="0.0001"></label>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap">
+        <button class="ghost" id="use-gps">Use my location</button>
+        <button class="primary" id="save-loc">Save location</button>
+      </div>
+      <label>Moon anchor: <span id="moon-val"></span>
+        <input type="range" id="moon-share" min="0" max="0.5" step="0.05">
+      </label>
+      <p class="note">The moon and falling-pressure parts are your choices, not from the catch data. The data showed no moon effect and no falling-pressure effect. Set them to 0% to see the weather-only score.</p>
+      <p class="note" id="status"></p>
+    </div>
+  </details>
+</main>
+
+<script>
+// Carp conditions score, 0-100. Built from Dutch angler catch records 2009-2024.
+// Inputs: t7 = 7-day mean air temp (C); windKmh = daily mean wind (km/h); pressure = daily mean sea-level pressure (hPa);
+// fallingPressure = hPa change over 24h (optional, 0 if unknown); date = the day being scored.
+const CAL = {"1": [-0.011, -0.004, 0.0, 0.092, 0.107, 0.107, 0.111, 0.111, 0.111, 0.129, 0.177, 0.181, 0.2, 0.202, 0.273, 0.273, 0.356, 0.375, 0.448], "2": [-0.011, -0.004, 0.0, 0.019, 0.107, 0.107, 0.111, 0.111, 0.129, 0.129, 0.129, 0.181, 0.2, 0.2, 0.202, 0.273, 0.356, 0.375, 0.448], "3": [-0.015, -0.004, -0.004, -0.004, 0.0, 0.019, 0.092, 0.107, 0.107, 0.111, 0.111, 0.111, 0.129, 0.129, 0.181, 0.2, 0.202, 0.273, 0.375], "4": [-0.011, -0.004, 0.0, 0.0, 0.0, 0.008, 0.019, 0.019, 0.092, 0.107, 0.111, 0.111, 0.111, 0.111, 0.129, 0.129, 0.181, 0.2, 0.245], "5": [-0.011, -0.004, 0.0, 0.0, 0.008, 0.019, 0.019, 0.107, 0.111, 0.111, 0.111, 0.129, 0.129, 0.129, 0.129, 0.2, 0.202, 0.245, 0.355], "6": [-0.004, 0.0, 0.0, 0.019, 0.107, 0.111, 0.111, 0.111, 0.129, 0.129, 0.181, 0.202, 0.233, 0.245, 0.263, 0.274, 0.355, 0.374, 0.374], "7": [0.008, 0.098, 0.111, 0.117, 0.209, 0.228, 0.233, 0.245, 0.245, 0.245, 0.263, 0.28, 0.355, 0.355, 0.374, 0.374, 0.374, 0.374, 0.445], "8": [0.087, 0.111, 0.129, 0.228, 0.233, 0.233, 0.245, 0.245, 0.245, 0.263, 0.263, 0.355, 0.355, 0.355, 0.374, 0.374, 0.374, 0.426, 0.445], "9": [-0.011, -0.004, 0.0, 0.0, 0.019, 0.107, 0.111, 0.111, 0.129, 0.129, 0.202, 0.233, 0.245, 0.245, 0.263, 0.355, 0.355, 0.374, 0.445], "10": [-0.011, 0.0, 0.0, 0.0, 0.019, 0.107, 0.111, 0.111, 0.111, 0.111, 0.129, 0.129, 0.129, 0.181, 0.2, 0.202, 0.245, 0.355, 0.375], "11": [-0.011, -0.004, 0.0, 0.0, 0.019, 0.019, 0.107, 0.111, 0.111, 0.111, 0.129, 0.129, 0.129, 0.181, 0.2, 0.202, 0.273, 0.356, 0.375], "12": [-0.004, -0.004, 0.019, 0.107, 0.107, 0.111, 0.111, 0.111, 0.129, 0.177, 0.181, 0.181, 0.2, 0.202, 0.273, 0.356, 0.356, 0.375, 0.448]};   // monthly percentile table of the weather index, from the catch-data run (rows = 5th..95th percentile)
+const TEMP = [[-99,5,0],[5,8,0],[8,12,0],[12,16,0],[16,20,0.244514],[20,99,0.098034]];          // catch-data multipliers (log)
+const WIND = [[-1,8,-0.011061],[8,12,0],[12,16,0.110647],[16,20,0.110647],[20,25,0.181488],[25,999,0.356275]];
+const PL1005 = 0.095310, PMAX = 0.182322;     // pressure lift: +10% measured at 1005 hPa; capped at +20% (extrapolated ramp to 990 hPa)
+const FALL_WEIGHT = 0.15;         // falling-pressure anchor, set by the app owner (not in the catch data)
+let MOON_SHARE_DEFAULT = 0.25;          // moon anchor, set by the app owner (not in the catch data)
+
+function lookup(rows, x) { for (const [lo, hi, v] of rows) if (x > lo && x <= hi) return v; return rows[rows.length - 1][2]; }
+function pressureLift(p) {
+  if (p >= 1015) return 0;
+  if (p >= 1005) return PL1005 * (1015 - p) / 10;
+  return Math.min(PMAX, PL1005 + (PMAX - PL1005) * (1005 - p) / 15);
+}
+function percentileIn(L, row) {   // where today's index sits within this month's history, 0-100
+  if (L < row[0]) return 0;
+  if (L >= row[row.length - 1]) return 100;
+  let j = 0; for (let i = 0; i < row.length; i++) if (row[i] <= L) j = i;
+  return 5 * (j + 1) + 5 * (L - row[j]) / (row[j + 1] - row[j]);
+}
+function moonPhase(date) {        // 0 = new, 0.5 = full
+  const ref = Date.UTC(2000, 0, 6, 18, 14);
+  const days = (date.getTime() + 12 * 3600e3 - ref) / 86400e3;
+  return ((days % 29.530588853) + 29.530588853) % 29.530588853 / 29.530588853;
+}
+function carpScore({ t7, windKmh, pressure, fallingPressure = 0, date, moonShare = MOON_SHARE_DEFAULT }) {
+  const row = CAL[String(date.getUTCMonth() + 1)];
+  const L = lookup(TEMP, t7) + lookup(WIND, windKmh) + pressureLift(pressure);
+  const weather = percentileIn(L, row);
+  // falling pressure: 0 when steady, up to 100 when falling 4+ hPa in 24h; rising pressure scores 0
+  const fall = Math.max(0, Math.min(100, -fallingPressure / 4 * 100));
+  const ph = moonPhase(date);
+  const moon = 100 * (1 + Math.cos(4 * Math.PI * ph)) / 2;
+  const wxShare = 1 - FALL_WEIGHT - moonShare;
+  const score = Math.round(wxShare * weather + FALL_WEIGHT * fall + moonShare * moon);
+  return { score, weather: Math.round(weather), fall: Math.round(fall), moon: Math.round(moon) };
+}
+
+
+</script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const DEFAULT = { lat: 50.83, lon: -0.17, name: "Hove" };
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  };
+  let loc = store.get("loc", DEFAULT);
+  let moonShare = store.get("moonShare", 0.25);
+  let W = null, selected = 0, daily = [];
+
+  function setStatus(t) { $("status").textContent = t; }
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  async function load() {
+    setStatus("Loading weather...");
+    const url = "https://api.open-meteo.com/v1/forecast?latitude=" + loc.lat + "&longitude=" + loc.lon +
+      "&hourly=temperature_2m,pressure_msl,wind_speed_10m,precipitation,cloud_cover" +
+      "&daily=sunrise,sunset&timezone=auto&past_days=8&forecast_days=8";
+    const r = await fetch(url);
+    if (!r.ok) throw new Error("Weather service returned " + r.status);
+    const j = await r.json();
+    const h = j.hourly, times = h.time;
+    // Times are local wall-clock strings; keep them as UTC-labelled Dates so the maths stays in local time.
+    const hours = times.map((t, i) => ({
+      t: new Date(t + ":00Z"), key: t.slice(0, 10), temp: h.temperature_2m[i], p: h.pressure_msl[i],
+      w: h.wind_speed_10m[i], rain: h.precipitation[i], cloud: h.cloud_cover[i]
+    }));
+    const byDay = {};
+    hours.forEach((x) => { (byDay[x.key] = byDay[x.key] || []).push(x); });
+    const days = Object.keys(byDay).sort().map((k) => {
+      const a = byDay[k], mean = (f) => a.reduce((s, x) => s + f(x), 0) / a.length;
+      const sun = j.daily.time.indexOf(k);
+      return { key: k, temp: mean((x) => x.temp), p: mean((x) => x.p), w: mean((x) => x.w),
+        rain: a.reduce((s, x) => s + (x.rain || 0), 0), cloud: mean((x) => x.cloud),
+        sunrise: sun >= 0 ? j.daily.sunrise[sun].slice(11, 16) : "", sunset: sun >= 0 ? j.daily.sunset[sun].slice(11, 16) : "" };
+    });
+    days.forEach((d, i) => {
+      d.dp = i > 0 ? d.p - days[i - 1].p : 0;
+      const win = days.slice(Math.max(0, i - 6), i + 1);
+      d.t7 = win.reduce((s, x) => s + x.temp, 0) / win.length;
+    });
+    daily = days;
+    W = { hours, days, byHour: {} };
+    hours.forEach((x, i) => { W.byHour[x.t.getTime()] = i; });
+    return W;
+  }
+
+  function scoreDay(d) {
+    return carpScore({ t7: d.t7, windKmh: d.w, pressure: d.p, fallingPressure: d.dp, date: new Date(d.key + "T12:00:00Z"), moonShare: moonShare });
+  }
+
+  function phaseName(ph) {
+    return ["New moon", "Waxing crescent", "First quarter", "Waxing gibbous", "Full moon", "Waning gibbous", "Last quarter", "Waning crescent"][Math.floor(((ph + 1 / 16) % 1) * 8)];
+  }
+
+  function renderToday() {
+    const d = daily[selected];
+    const s = scoreDay(d);
+    $("score").textContent = s.score;
+    $("p-weather").textContent = s.weather;
+    $("p-fall").textContent = s.fall;
+    $("p-moon").textContent = s.moon;
+    const ph = moonPhase(new Date(d.key + "T12:00:00Z"));
+    const lit = Math.round((1 - Math.cos(2 * Math.PI * ph)) / 2 * 100);
+    $("explain").textContent = (s.score >= 70 ? "Strong day. " : s.score >= 40 ? "Middling day. " : "Quiet day. ") +
+      "Weather index " + s.weather + " against this month's history. " + phaseName(ph) + ", " + lit + "% lit.";
+  }
+
+  function renderDays() {
+    const today = new Date().toISOString().slice(0, 10);
+    const start = daily.findIndex((d) => d.key >= today);
+    const list = daily.slice(Math.max(0, start), Math.max(0, start) + 7);
+    $("days").innerHTML = list.map((d, i) => {
+      const idx = daily.indexOf(d);
+      const s = scoreDay(d).score;
+      const dt = new Date(d.key + "T12:00:00Z");
+      const name = i === 0 ? "Today" : dt.toLocaleDateString("en-GB", { weekday: "short" });
+      return '<button class="day" data-i="' + idx + '" aria-pressed="' + (idx === selected) + '"><div class="n">' + name +
+        '</div><div class="s">' + s + '</div><div class="n">' + Math.round(d.temp) + '°</div></button>';
+    }).join("");
+    selected = selected || Math.max(0, start);
+    $("days").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+      selected = +b.dataset.i; render();
+    }));
+  }
+
+  function renderCurve() {
+    const d = daily[selected];
+    const hrs = W.hours.filter((x) => x.key === d.key);
+    const W_ = 520, H = 180, pad = { l: 28, r: 8, t: 10, b: 24 };
+    const pts = hrs.map((x, i) => {
+      const i24 = W.byHour[x.t.getTime() - 24 * 3600e3];
+      const dp = i24 != null ? x.p - W.hours[i24].p : 0;
+      return { x: x.t.getUTCHours(), s: carpScore({ t7: d.t7, windKmh: x.w, pressure: x.p, fallingPressure: dp, date: x.t, moonShare }).score };
+    });
+    const sx = (h) => pad.l + (h / 23) * (W_ - pad.l - pad.r);
+    const sy = (v) => pad.t + (1 - v / 100) * (H - pad.t - pad.b);
+    const path = pts.map((p, i) => (i ? "L" : "M") + sx(p.x).toFixed(1) + " " + sy(p.s).toFixed(1)).join(" ");
+    let grid = "";
+    [0, 50, 100].forEach((v) => { grid += '<line x1="' + pad.l + '" x2="' + (W_ - pad.r) + '" y1="' + sy(v) + '" y2="' + sy(v) + '"/><text class="tick" x="2" y="' + (sy(v) + 3) + '">' + v + '</text>'; });
+    [0, 6, 12, 18, 23].forEach((h) => { grid += '<text class="tick" x="' + sx(h) + '" y="' + (H - 6) + '" text-anchor="middle">' + String(h).padStart(2, "0") + ':00</text>'; });
+    $("curve").innerHTML = '<svg viewBox="0 0 ' + W_ + ' ' + H + '" role="img" aria-label="Hourly score for ' + esc(d.key) + '"><g class="grid">' + grid + '</g>' +
+      '<path d="' + path + '" fill="none" stroke="var(--accent)" stroke-width="2.5"/></svg>';
+    $("curve-h").textContent = "Hourly score, " + new Date(d.key + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" });
+  }
+
+  function renderPressure() {
+    const now = Date.now();
+    const local = new Date(now - new Date().getTimezoneOffset() * 60000);
+    const nowHour = local.toISOString().slice(0, 13);
+    const ni = W.hours.findIndex((x) => x.t.toISOString().slice(0, 13) === nowHour);
+    const from = Math.max(0, (ni < 0 ? 48 : ni) - 48), to = Math.min(W.hours.length, (ni < 0 ? 48 : ni) + 73);
+    const seg = W.hours.slice(from, to);
+    const vals = seg.map((x) => x.p);
+    const lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
+    const W_ = 520, H = 160, pad = { l: 36, r: 8, t: 8, b: 20 };
+    const sx = (i) => pad.l + (i / (seg.length - 1)) * (W_ - pad.l - pad.r);
+    const sy = (v) => pad.t + (1 - (v - lo) / (hi - lo)) * (H - pad.t - pad.b);
+    const path = seg.map((x, i) => (i ? "L" : "M") + sx(i).toFixed(1) + " " + sy(x.p).toFixed(1)).join(" ");
+    const nowX = ni < 0 ? null : sx(ni - from);
+    let g = "";
+    for (let v = Math.ceil(lo / 5) * 5; v <= hi; v += 5) g += '<line x1="' + pad.l + '" x2="' + (W_ - pad.r) + '" y1="' + sy(v) + '" y2="' + sy(v) + '"/><text class="tick" x="2" y="' + (sy(v) + 3) + '">' + v + '</text>';
+    if (nowX != null) g += '<line x1="' + nowX + '" x2="' + nowX + '" y1="' + pad.t + '" y2="' + (H - pad.b) + '" stroke="var(--muted)" stroke-dasharray="3 3"/>';
+    $("pressure").innerHTML = '<svg viewBox="0 0 ' + W_ + ' ' + H + '" role="img" aria-label="Sea-level pressure trend"><g class="grid">' + g + '</g>' +
+      '<path d="' + path + '" fill="none" stroke="var(--cool)" stroke-width="2.5"/></svg>';
+    const cur = ni < 0 ? null : W.hours[ni];
+    const prev = ni >= 24 ? W.hours[ni - 24] : null;
+    const ch = cur && prev ? cur.p - prev.p : null;
+    const trend = ch == null ? "" : ch < -1.5 ? "Falling (" + ch.toFixed(1) + " hPa in 24h). Carp anglers' tradition says this is a good sign." :
+      ch > 1.5 ? "Rising (+" + ch.toFixed(1) + " hPa in 24h). Usually a quieter spell." : "Steady (" + (ch >= 0 ? "+" : "") + ch.toFixed(1) + " hPa in 24h).";
+    $("pressure-note").textContent = trend;
+  }
+
+  function renderSummary() {
+    const d = daily[selected];
+    const ph = moonPhase(new Date(d.key + "T12:00:00Z"));
+    const lit = Math.round((1 - Math.cos(2 * Math.PI * ph)) / 2 * 100);
+    const kv = [
+      ["Air temp (day)", Math.round(d.temp) + " °C"], ["7-day mean temp", d.t7.toFixed(1) + " °C"],
+      ["Wind (mean)", Math.round(d.w) + " km/h"], ["Pressure (mean)", Math.round(d.p) + " hPa"],
+      ["Rain (day)", d.rain.toFixed(1) + " mm"], ["Cloud (mean)", Math.round(d.cloud) + "%"],
+      ["Sunrise", d.sunrise || "--"], ["Sunset", d.sunset || "--"],
+      ["Moon", phaseName(ph)], ["Moon lit", lit + "%"]
+    ];
+    $("summary").innerHTML = kv.map(([k, v]) => '<div><div class="label">' + k + '</div><b>' + esc(v) + '</b></div>').join("");
+  }
+
+  function render() {
+    renderToday(); renderDays(); renderCurve(); renderPressure(); renderSummary();
+    $("where").textContent = loc.name || (loc.lat.toFixed(2) + ", " + loc.lon.toFixed(2));
+    $("updated").textContent = "Updated " + new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function fillSettings() {
+    $("lat").value = loc.lat; $("lon").value = loc.lon;
+    $("moon-share").value = moonShare;
+    $("moon-val").textContent = Math.round(moonShare * 100) + "%";
+  }
+
+  $("use-gps").addEventListener("click", () => {
+    if (!navigator.geolocation) { setStatus("Location is not available here. Type coordinates instead."); return; }
+    navigator.geolocation.getCurrentPosition(
+      (p) => { $("lat").value = p.coords.latitude.toFixed(4); $("lon").value = p.coords.longitude.toFixed(4); setStatus("Location found. Tap Save location."); },
+      () => setStatus("Location was refused. Type coordinates instead.")
+    );
+  });
+  $("save-loc").addEventListener("click", async () => {
+    const lat = parseFloat($("lat").value), lon = parseFloat($("lon").value);
+    if (!isFinite(lat) || !isFinite(lon)) { setStatus("Enter both coordinates."); return; }
+    loc = { lat, lon, name: "" };
+    store.set("loc", loc);
+    await refresh();
+  });
+  $("moon-share").addEventListener("input", (e) => {
+    const v = parseFloat(e.target.value);
+    $("moon-val").textContent = Math.round(v * 100) + "%";
+    store.set("moonShare", v);
+    moonShare = v; render();
+  });
+
+  async function refresh() {
+    try {
+      await load(); selected = 0; render(); fillSettings();
+      setStatus("Weather updated from Open-Meteo.");
+    } catch (e) { setStatus("Could not load weather: " + e.message); }
+  }
+  refresh();
+})();
+</script>
+</body>
+</html>
